@@ -10,6 +10,7 @@ theories/Equivalence.v
 theories/Morphisms.v
 theories/MorphismsFacts.v
 theories/Fix.v
+theories/FixFacts.v
 theories/UpTo.v
 theories/MutFix.v
 theories/Trace.v

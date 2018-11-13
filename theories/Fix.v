@@ -4,6 +4,11 @@
  * The implementation is based on the discussion here
  *   https://gmalecha.github.io/reflections/2018/compositional-coinductive-recursion-in-coq
  *)
+
+(* note(LY): I would rather call this [fix_itree] because [mfix] in
+   Haskell already means [mfix : (a -> m a) -> m a] which has quite
+   different semantics. *)
+
 Require Import ITree.ITree.
 Require Import ITree.Morphisms.
 Require Import ITree.OpenSum.
@@ -127,6 +132,7 @@ Module FixImpl <: FixSig.
       mfix E unit (fun _ => codom)
            (fun E' lift self (_ : unit) =>
               body E' lift (self tt)) tt.
+
   End Fix0.
 
   (* [mfix] with constant codomain. *)

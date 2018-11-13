@@ -29,6 +29,9 @@ Lemma iff_or_and {P Q : Prop} :
   P <-> Q -> P \/ Q -> P /\ Q.
 Proof. firstorder. Qed.
 
+Lemma and_iff {P Q : Prop} : P /\ Q -> (P <-> Q).
+Proof. firstorder. Qed.
+
 Section EUTT.
 
 Context {E : Type -> Type} {R : Type}.
