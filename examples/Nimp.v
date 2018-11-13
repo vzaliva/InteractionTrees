@@ -3,8 +3,10 @@
 From Coq Require Import
      Relations.
 
+From Paco Require Import paco2.
+
 From ITree Require Import
-     ITree Equivalence Fix.
+     ITree Equivalence Fix FixFacts.
 
 Inductive com : Type :=
 | loop : com -> com (* Nondeterministically, continue or stop. *)
@@ -133,12 +135,41 @@ Definition one_loop_tree : itree nd unit :=
     (* note: [or] is not allowed under [mfix]. *)
     b <- lift _ choice;;
     if b then
-      self
+      Ret tt
     else
-      Ret tt)%itree.
+      self)%itree.
 
 Lemma eval_one_loop : (eval one_loop ~ one_loop_tree)%eutt.
 Proof.
-Abort.
+  pcofix eval_one_loop.
+  unfold one_loop_tree. rewrite mfix0_unfold.
+  unfold eval. rewrite mfix1_unfold.
+  simpl.
+  (* Here I would like to avoid [match_bind] and instead reason
+     compositionally about [bind], but the proof seems to rely on
+     [choice] producing at least one visible effect. *)
+  do 2 rewrite (match_bind choice); simpl.
+  pfold. split.
+  { apply and_iff.
+    split; apply finite_taus_Vis.
+  }
+  intros t1' t2' Ht1' Ht2'.
+  apply unalltaus_notau_id in Ht1'; [|constructor].
+  apply unalltaus_notau_id in Ht2'; [|constructor].
+  subst.
+  constructor.
+  intro b.
+  do 2 rewrite (match_bind (Ret _)); simpl.
+  destruct b; simpl.
+  - left. pfold. apply Reflexive_eutt_. left.
+    eapply paco2_mon.
+    { eapply Reflexive_eutt. }
+    { intros ? ? []. }
+  - right.
+    fold eval. fold one_loop_tree.
+    unfold eval at 1.
+    rewrite mfix1_unfold. rewrite (match_bind (Ret _)); simpl.
+    apply eval_one_loop.
+Qed.
 
 End Tree.
