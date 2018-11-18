@@ -1,4 +1,6 @@
-From Coq Require Import Arith.
+From Coq Require Import
+     Arith List.
+Import ListNotations.
 
 From ExtLib.Structures Require Import
      Monad.
@@ -9,6 +11,164 @@ From ITree Require Import
      ITree
      OpenSum
      Fix.
+
+(* Warm-up exercise. Denotational semantics of STLC. *)
+Module Stlc.
+
+Inductive ty : Type :=
+| B : ty
+| Arrow : ty -> ty -> ty
+.
+
+Infix "->" := Arrow : ty_scope.
+Bind Scope ty_scope with ty.
+
+Definition context : Type := list ty.
+
+Inductive var (u : ty) : context -> Type :=
+| Here  g   : var u (u :: g)
+| There g v : var u g -> var u (v :: g)
+.
+
+Arguments Here {u g}.
+Arguments There {u g v}.
+
+Inductive tm (g : context) : ty -> Type :=
+| Var u : var u g -> tm g u
+| App u v : tm g (u -> v) -> tm g u -> tm g v
+| Lam u v : tm (u :: g) v -> tm g (u -> v)
+.
+
+Arguments Var {g u}.
+Arguments App {g u v}.
+Arguments Lam {g u v}.
+
+Fixpoint ty_sem (A : Type) (u : ty) : Type :=
+  match u with
+  | B => A
+  | Arrow v w => (ty_sem A v -> ty_sem A w)
+  end.
+
+Fixpoint context_sem (A : Type) (g : context) : Type :=
+  match g with
+  | [] => unit
+  | u :: g' => ty_sem A u * context_sem A g'
+  end.
+
+Fixpoint var_sem (A : Type) {g : context} {u : ty} (x : var u g) :
+  context_sem A g -> ty_sem A u :=
+  match x with
+  | Here => fun r => fst r
+  | There x' => fun r => var_sem A x' (snd r)
+  end.
+
+Fixpoint tm_sem (A : Type) {g : context} {u : ty} (t : tm g u) :
+  context_sem A g -> ty_sem A u :=
+  match t with
+  | Var x => var_sem A x
+  | App t1 t2 =>
+    fun r => (tm_sem A t1 r) (tm_sem A t2 r)
+  | Lam t1 =>
+    fun r e => tm_sem A t1 (e, r)
+  end.
+
+Definition sem (A : Type) {u : ty} (t : tm [] u) : ty_sem A u :=
+  tm_sem A t tt.
+
+End Stlc.
+
+(* STLC with fix *)
+Module StlcFix.
+
+Inductive ty : Type :=
+| B : ty
+| Arrow : ty -> ty -> ty
+.
+
+Bind Scope ty_scope with ty.
+Delimit Scope ty_scope with ty.
+
+Infix "->" := Arrow : ty_scope.
+
+Definition context : Type := list ty.
+
+Inductive var (u : ty) : context -> Type :=
+| Here  g   : var u (u :: g)
+| There g v : var u g -> var u (v :: g)
+.
+
+Arguments Here {u g}.
+Arguments There {u g v}.
+
+Inductive tm (g : context) : ty -> Type :=
+| Var u : var u g -> tm g u
+| App u v : tm g (u -> v) -> tm g u -> tm g v
+| Lam u v : tm (u :: g) v -> tm g (u -> v)
+| Fix u v : tm (u :: (u -> v)%ty :: g) v -> tm g (u -> v)
+.
+
+Arguments Var {g u}.
+Arguments App {g u v}.
+Arguments Lam {g u v}.
+Arguments Fix {g u v}.
+
+End StlcFix.
+
+Module StlcFixFuel.
+
+Import StlcFix.
+
+Class MonadFix (M : Type -> Type) `{Monad M} : Type :=
+  fixm : forall A B, ((A -> M B) -> A -> M B) -> A -> M B.
+
+Arguments fixm {M _ _ A B}.
+
+Fixpoint ty_sem (M : Type -> Type) (A : Type) (u : ty) : Type :=
+  match u with
+  | B => A
+  | Arrow v w => (ty_sem M A v -> M (ty_sem M A w))
+  end.
+
+Fixpoint context_sem (M : Type -> Type) (A : Type) (g : context) : Type :=
+  match g with
+  | [] => unit
+  | u :: g' => ty_sem M A u * context_sem M A g'
+  end.
+
+Fixpoint var_sem (M : Type -> Type) (A : Type)
+         {g : context} {u : ty} (x : var u g) :
+  context_sem M A g -> ty_sem M A u :=
+  match x with
+  | Here => fun r => fst r
+  | There x' => fun r => var_sem M A x' (snd r)
+  end.
+
+Fixpoint tm_sem (M : Type -> Type) `{MonadFix M} (A : Type)
+         {g : context} {u : ty} (t : tm g u) :
+  context_sem M A g -> M (ty_sem M A u) :=
+  match t with
+  | Var x => fun g => ret (var_sem M A x g)
+  | App t1 t2 =>
+    fun r =>
+      s <- tm_sem M A t2 r;;
+      f <- tm_sem M A t1 r;;
+      f s
+  | Lam t1 =>
+    fun r =>
+      ret (fun e => tm_sem M A t1 (e, r))
+  | Fix t1 =>
+    fun r =>
+      ret (fixm (fun self e =>
+                   tm_sem M A t1 (e, (self, r))))
+  end.
+
+Definition sem (M : Type -> Type) `{MonadFix M}
+           (A : Type) {u : ty} (t : tm [] u) : M (ty_sem M A u) :=
+  tm_sem M A t tt.
+
+End StlcFixFuel.
+
+Module Untyped.
 
 Inductive term : Type :=
 | Var : nat -> term
@@ -73,3 +233,5 @@ Definition big_step : term -> itree emptyE value :=
       end
     | Lam t => ret (VLam t)
     end).
+
+End Untyped.
