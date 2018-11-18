@@ -6,6 +6,7 @@ theories/ITree.v
 
 theories/Eq/Eq.v
 theories/Eq/UpToTaus.v
+theories/Eq/BisimilarityUpToTaus.v
 
 theories/Morphisms.v
 theories/MorphismsFacts.v
