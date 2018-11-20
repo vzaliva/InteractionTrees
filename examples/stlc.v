@@ -168,6 +168,101 @@ Definition sem (M : Type -> Type) `{MonadFix M}
 
 End StlcFixFuel.
 
+Module StlcFixITreeVersion0.
+
+Import StlcFix.
+
+Notation "E ~> F" := (forall X, E X -> F X) (at level 90) : type_scope.
+
+Fixpoint ty_sem (E : Type -> Type) (A : Type) (u : ty) : Type :=
+  match u with
+  | B => A
+  | Arrow v w => (ty_sem E A v -> itree E (ty_sem E A w))
+  end.
+
+Fixpoint context_sem (E : Type -> Type) (A : Type) (g : context) : Type :=
+  match g with
+  | [] => unit
+  | u :: g' => ty_sem E A u * context_sem E A g'
+  end.
+
+Fixpoint var_sem (E : Type -> Type) (A : Type)
+         {g : context} {u : ty} (x : var u g) :
+  context_sem E A g -> ty_sem E A u :=
+  match x with
+  | Here => fun r => fst r
+  | There x' => fun r => var_sem E A x' (snd r)
+  end.
+
+Module Fail1.
+
+Fixpoint tm_sem (E : Type -> Type) (A : Type)
+         {g : context} {u : ty} (t : tm g u) :
+  context_sem E A g -> itree E (ty_sem E A u) :=
+  match t with
+  | Var x => fun g => ret (var_sem E A x g)
+  | App t1 t2 =>
+    fun r =>
+      s <- tm_sem E A t2 r;;
+      f <- tm_sem E A t1 r;;
+      f s
+  | Lam t1 =>
+    fun r =>
+      ret (fun e => tm_sem E A t1 (e, r))
+  | Fix t1 =>
+    fun r => spin (* DUMMY *)
+  end.
+
+(* We need to modify [E] to insert fix, so this suggests replacing
+   the context t with [forall F, {E ~> F} -> context_sem F A g]. *)
+
+Definition sem (E : Type -> Type)
+           (A : Type) {u : ty} (t : tm [] u) : itree E (ty_sem E A u) :=
+  tm_sem E A t tt.
+
+End Fail1.
+
+Module Fail2.
+
+Parameter BAD_ty_sem_map :
+  forall A u E F, (E ~> F) -> ty_sem E A u -> ty_sem F A u.
+
+Fixpoint tm_sem (E : Type -> Type) (A : Type)
+         {g : context} {u : ty} (t : tm g u) :
+  (forall F, (E ~> F) -> context_sem F A g) -> itree E (ty_sem E A u) :=
+  match t with
+  | Var x => fun g => ret (var_sem E A x (g _ (fun _ x => x)))
+  | App t1 t2 =>
+    fun r =>
+      s <- tm_sem E A t2 r;;
+      f <- tm_sem E A t1 r;;
+      f s
+  | Lam t1 =>
+    fun r =>
+      ret (fun e => tm_sem E A t1 (fun F inF =>
+             (BAD_ty_sem_map _ _ _ F inF e, r F inF)))
+  | Fix t1 =>
+    fun r => spin (* DUMMY *)
+  end.
+
+(* We are already stuck in the [Lam] case, trying to define
+   [BAD_ty_sem_map]. It is undefinable: [E] has negative occurences
+   in [ty_sem E A u].
+
+   We will have a similar problem in [Fix]: note the inner [E] in
+   [itree E (ty_sem E A u)], so after the recursive call we need to
+   define
+   [itree (E + fixE) (ty_sem (E + fixE) A u)
+          -> itree E (ty_sem E A u)], which is also impossible.
+
+   Maybe we can do more generalization in [ty_sem] like we already
+   did with the context. This seems tricky.
+ *)
+
+End Fail2.
+
+End StlcFixITreeVersion0.
+
 Module Untyped.
 
 Inductive term : Type :=
